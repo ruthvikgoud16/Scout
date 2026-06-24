@@ -1,0 +1,87 @@
+{
+  "theme": "LIGHT",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "emotional_tone": "Authoritative, technical, high-energy, functional",
+  "typography": {
+    "font_family_headings": "Cabinet Grotesk, sans-serif",
+    "font_family_body": "JetBrains Mono, monospace",
+    "hierarchy": {
+      "h1": "text-5xl sm:text-6xl font-black tracking-tighter leading-none text-zinc-950",
+      "h2": "text-3xl sm:text-4xl font-bold tracking-tight text-zinc-900",
+      "h3": "text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900",
+      "h4": "text-lg sm:text-xl font-medium text-zinc-900",
+      "body": "text-base leading-relaxed text-zinc-700",
+      "labels_overlines": "text-xs font-bold uppercase tracking-[0.2em] text-zinc-500"
+    }
+  },
+  "colors": {
+    "background_base": "#FAFAFA",
+    "background_surface": "#FFFFFF",
+    "text_primary": "#0A0A0A",
+    "text_secondary": "#52525B",
+    "border_color": "rgba(10, 10, 10, 0.1)",
+    "accents": {
+      "primary": "#2962FF",
+      "live_status": "#00E676",
+      "warning": "#FFEA00",
+      "danger": "#FF1744"
+    }
+  },
+  "surface_strategies": {
+    "cards": "Flat background (bg-white), 1px solid border-zinc-200, no shadow by default. On hover: shadow-lg, -translate-y-1, border-zinc-300.",
+    "live_hackathon_cards": "Apply 'The Tracing Beam' (Linear/Aceternity look) with a subtle glowing border mask to indicate active/live events.",
+    "header": "Crystal Glassmorphism: bg-white/70, backdrop-blur-xl, 1px bottom border border-black/10.",
+    "dashboard_grid": "Grid Borders: use border-collapse style layouts for dense data, with border-r and border-b on items."
+  },
+  "spacing_and_layout": {
+    "container": "Max-w-7xl mx-auto px-6 md:px-12",
+    "generous_spacing": "Use p-8 to p-12 for major containers to give breathing room. For dense data, use p-4 to p-6.",
+    "grid_modes": {
+      "hero_marketing": "MODE A (Tetris Grid): Asymmetric bento grid for stats and featured hackathons. Wide gaps (gap-8).",
+      "listings": "MODE B (Control Room Grid): Dense layout for tracking lists, gap-4 to gap-6, 100% height utilization."
+    }
+  },
+  "components_instructions": {
+    "general": "Use pure HTML + Tailwind for structural/marketing layouts. Use Shadcn UI for interactive elements.",
+    "buttons": "Flat, hard corners or slightly rounded (rounded-md), strong contrast hover states (hover:bg-zinc-900 hover:text-white).",
+    "filters_search": "Use Shadcn Select, Input, and Tabs. Customise with JetBrains Mono font and square corners.",
+    "marquee": "Use react-fast-marquee for a 'Kinetic Texture' showing live 'Registration Open' or 'Newly Added' hackathons.",
+    "ai_assistant": "Floating or side-panel chat UI using Shadcn Card and ScrollArea. Give it a distinct background tint (e.g., bg-blue-50/50) to differentiate from main content.",
+    "icons": "Use Phosphor Icons (@phosphor-icons/react) for a dense, professional developer tool look."
+  },
+  "motion_and_interactions": {
+    "hover_states": "All interactive elements MUST have explicit hover states altering background and text color.",
+    "transitions": "transition-all duration-200 ease-in-out for basic interactions. Use framer-motion for page entrances.",
+    "accessibility": "Respect prefers-reduced-motion. Ensure focus states have high contrast (focus:ring-2 focus:ring-blue-600)."
+  },
+  "testing": {
+    "attributes": "All interactive elements MUST include data-testid attributes (e.g., data-testid='search-input', data-testid='apply-button')."
+  },
+  "image_urls": [
+    {
+      "url": "https://images.pexels.com/photos/12899191/pexels-photo-12899191.jpeg",
+      "description": "Two developers coding on laptop",
+      "category": "hero_background_or_prep_section"
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1565598621680-94ac0c22b148",
+      "description": "Woman using MacBook",
+      "category": "student_resources_thumbnail"
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1661347998648-79ad2d81bf26",
+      "description": "Tech company logo placeholder (TikTok)",
+      "category": "company_logo_placeholder_1"
+    },
+    {
+      "url": "https://images.pexels.com/photos/15863044/pexels-photo-15863044.jpeg",
+      "description": "OpenAI Logo",
+      "category": "ai_assistant_avatar_or_logo"
+    },
+    {
+      "url": "https://images.pexels.com/photos/32933031/pexels-photo-32933031.jpeg",
+      "description": "Geometric abstract grid",
+      "category": "texture_background_for_stats"
+    }
+  ]
+}
