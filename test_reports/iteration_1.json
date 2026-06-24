@@ -1,0 +1,35 @@
+{
+  "summary": "Full end-to-end testing of HackTrack. All 15 backend pytest tests pass (100%): root, stats, list+all filters (region/mode/status/company/search), single by id, 404 on invalid id, companies, resources, Gemini-powered AI prep generation (persisted to DB), background refresh kickoff, SSE chat stream + history. Frontend Home, Hackathons listing/filtering, Detail page with AI prep generation (5 rounds, 10 checklist items, 8 resources rendered), Resources page, and AIAssistant streaming all verified working against the public REACT_APP_BACKEND_URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AIAssistant FAB", "issue": "'Made with Emergent' badge in the bottom-right corner overlaps the [data-testid=\"open-assistant\"] button. Playwright force-click was intercepted; a JS .click() had to be used. Real users may also have a hard-to-click hot zone in that corner.", "selector": "[data-testid=\"open-assistant\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All pages with company logos", "issues": ["logo.clearbit.com requests fail with ERR_NAME_NOT_RESOLVED inside the Playwright sandbox (network restriction). Production browsers should load them, but consider a fallback letter avatar if the image fails so the UI doesn't show a blank square."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_hacktrack.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Move the AIAssistant FAB slightly so it doesn't sit under the bottom-right 'Made with Emergent' badge (e.g. bottom-20 or left-side), or use higher z-index so clicks land on the button.",
+    "Add image onError fallback for company_logo (clearbit) — show a coloured initial avatar when the logo fails to load.",
+    "(Nice-to-have) Add individual data-testids on each stat tile in Home stats-grid (stat-total, stat-open, stat-upcoming, stat-companies) for easier targeted assertions."
+  ],
+  "critical_code_review_comments": [
+    "server.py uses deprecated @app.on_event('startup'/'shutdown') — migrate to FastAPI lifespan handlers.",
+    "Prep route raises HTTPException(500, str(e)) leaking exception text to clients — sanitize the public error message.",
+    "refresh_hackathons background task has no rate limiting/cooldown — repeated clicks will spawn parallel Gemini calls.",
+    "CORS allow_origins='*' with allow_credentials=True is invalid per CORS spec; browsers will reject credentialed requests. Pin to real origins."
+  ],
+  "updated_files": ["/app/backend/tests/test_hacktrack.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "test_credentials": "N/A - no auth in app",
+  "seed_data_creation": "Not needed - app self-seeds 12 hackathons on startup; AI refresh has already added more during prior runs (total ~36 at time of test).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live in /app/backend/tests/test_hacktrack.py and pass cleanly in ~15s. The Gemini prep route can take 20-60s. Frontend AIAssistant FAB is overlapped by the 'Made with Emergent' badge — use JS click in Playwright or scroll/position fix. shadcn Select components for filters need: click the trigger first, then page.get_by_role('option', name=X).click(force=True). Resource testids on /resources include both 'res-{category}' and 'res-link-{category}-{i}', so filter accordingly when counting categories."
+}
