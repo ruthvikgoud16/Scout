@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getHackathon, generatePrep } from "@/lib/api";
 import { fmtDate, countdown, statusColor } from "@/lib/format";
+import CompanyLogo from "@/components/CompanyLogo";
 import { toast } from "sonner";
 
 const RES_ICON = {
@@ -87,19 +88,13 @@ export default function HackathonDetail() {
         <div className="lg:col-span-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-zinc-100 border border-zinc-200 grid place-items-center overflow-hidden">
-              {h.company_logo && (
-                <img
-                  src={h.company_logo}
-                  alt={h.company}
-                  className="w-full h-full object-contain"
-                  onError={(e) => (e.target.style.display = "none")}
-                />
-              )}
+              <CompanyLogo name={h.company} url={h.company_logo} />
             </div>
             <div>
               <div className="label-over">{h.company}</div>
               <div className="text-xs text-zinc-500">
-                {h.region} · {h.mode}
+                {h.event_type} · {h.region} · {h.mode}
+                {h.audience?.length ? ` · ${h.audience.join(" & ")}` : ""}
               </div>
             </div>
             <span

@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Filter, X } from "lucide-react";
-import { listHackathons, getCompanies } from "@/lib/api";
+import {
+  listHackathons,
+  getCompanies,
+  getEventTypes,
+} from "@/lib/api";
 import HackathonCard from "@/components/HackathonCard";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +20,7 @@ import { Button } from "@/components/ui/button";
 const REGIONS = ["All", "India", "International"];
 const MODES = ["All", "Online", "Offline", "Hybrid"];
 const STATUSES = ["All", "Open", "Upcoming", "Closed"];
+const AUDIENCES = ["All", "Students", "Professionals"];
 
 export default function Hackathons() {
   const [search, setSearch] = useState("");
@@ -23,13 +28,22 @@ export default function Hackathons() {
   const [mode, setMode] = useState("All");
   const [status, setStatus] = useState("All");
   const [company, setCompany] = useState("All");
+  const [eventType, setEventType] = useState("All");
+  const [audience, setAudience] = useState("All");
 
   const { data: companies = [] } = useQuery({
     queryKey: ["companies"],
     queryFn: getCompanies,
   });
+  const { data: types = [] } = useQuery({
+    queryKey: ["event-types"],
+    queryFn: getEventTypes,
+  });
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ["hackathons", { search, region, mode, status, company }],
+    queryKey: [
+      "hackathons",
+      { search, region, mode, status, company, eventType, audience },
+    ],
     queryFn: () =>
       listHackathons({
         search: search || undefined,
@@ -37,6 +51,8 @@ export default function Hackathons() {
         mode,
         status,
         company,
+        event_type: eventType,
+        audience,
       }),
   });
 
@@ -53,6 +69,8 @@ export default function Hackathons() {
     setMode("All");
     setStatus("All");
     setCompany("All");
+    setEventType("All");
+    setAudience("All");
   };
 
   const activeFilters =
@@ -60,6 +78,8 @@ export default function Hackathons() {
     (mode !== "All" ? 1 : 0) +
     (status !== "All" ? 1 : 0) +
     (company !== "All" ? 1 : 0) +
+    (eventType !== "All" ? 1 : 0) +
+    (audience !== "All" ? 1 : 0) +
     (search ? 1 : 0);
 
   return (
@@ -67,11 +87,12 @@ export default function Hackathons() {
       <header>
         <div className="label-over">/// catalog</div>
         <h1 className="display text-4xl sm:text-5xl font-extrabold tracking-tighter mt-2">
-          Hiring Hackathons
+          Every event worth attending.
         </h1>
         <p className="text-zinc-600 mt-3 max-w-2xl">
-          Filter by region, mode and status. Click any card for the AI-generated
-          prep guide.
+          Hackathons, conferences, summits, workshops, meetups & invite-only
+          programs. Filter by event type, audience, region & mode — then open
+          any card for the AI-generated prep guide.
         </p>
       </header>
 
@@ -87,7 +108,21 @@ export default function Hackathons() {
             data-testid="search-input"
           />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <FilterSelect
+            label="Type"
+            value={eventType}
+            onChange={setEventType}
+            options={["All", ...types]}
+            testid="filter-type"
+          />
+          <FilterSelect
+            label="Audience"
+            value={audience}
+            onChange={setAudience}
+            options={AUDIENCES}
+            testid="filter-audience"
+          />
           <FilterSelect
             label="Region"
             value={region}

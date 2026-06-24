@@ -67,10 +67,9 @@ export default function Home() {
               transition={{ duration: 0.6, delay: 0.05 }}
               className="display text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tighter leading-[0.95] mt-4"
             >
-              Track every{" "}
-              <span className="text-[var(--brand)]">hiring hackathon</span>
-              <br />
-              that hires students.
+              Every{" "}
+              <span className="text-[var(--brand)]">hackathon, conference</span>
+              <br />& invite-only event — in one place.
             </motion.h1>
             <motion.p
               initial={{ opacity: 0 }}
@@ -78,10 +77,12 @@ export default function Home() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-zinc-600 text-base sm:text-lg max-w-2xl mt-6 leading-relaxed"
             >
-              Myntra HackerRamp. Meesho Maverix. Google Hash Code. Meta Hacker
-              Cup. Indian and international, online, offline & hybrid — all in
-              one place. With AI-generated rounds, requirements and a complete
-              prep playbook for every event.
+              Hiring hackathons (Myntra HackerRamp, Meesho Maverix), global tech
+              conferences (Google I/O, KubeCon, AWS re:Invent), invite-only
+              summits (YC Startup School, Stripe Sessions), local meetups &
+              workshops. Indian + international. Online, offline & hybrid. With
+              an AI-generated prep playbook for every event — for{" "}
+              <strong>students</strong> and <strong>working professionals</strong>.
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -121,23 +122,27 @@ export default function Home() {
               label="Total tracked"
               value={stats?.total ?? "—"}
               icon={<Trophy className="w-4 h-4" />}
+              testid="stat-total"
             />
             <StatTile
               label="Open now"
               value={stats?.open ?? "—"}
               accent="bg-emerald-400"
               icon={<Zap className="w-4 h-4" />}
+              testid="stat-open"
             />
             <StatTile
               label="Upcoming"
               value={stats?.upcoming ?? "—"}
               accent="bg-amber-300"
               icon={<GraduationCap className="w-4 h-4" />}
+              testid="stat-upcoming"
             />
             <StatTile
               label="Companies"
               value={stats?.companies_count ?? "—"}
               icon={<Globe2 className="w-4 h-4" />}
+              testid="stat-companies"
             />
           </div>
         </div>
@@ -207,17 +212,17 @@ export default function Home() {
             {
               n: "01",
               title: "Discover",
-              body: "We auto-curate hiring hackathons across India and the world — online, offline, and hybrid — using Gemini AI.",
+              body: "We auto-curate hiring hackathons, conferences, summits, workshops, meetups & invite-only events from India and the world — using Gemini AI.",
             },
             {
               n: "02",
               title: "Prep",
-              body: "Each event has typical rounds, eligibility, a personalised checklist and hand-picked learning resources.",
+              body: "Each event has typical rounds, eligibility, a personalised checklist and hand-picked learning resources — tailored to students or working professionals.",
             },
             {
               n: "03",
               title: "Win",
-              body: "Track deadlines, chat with HackPilot AI for strategy, and walk into your dream company prepared.",
+              body: "Track deadlines, chat with HackPilot AI for strategy, and walk into your dream event prepared.",
             },
           ].map((s) => (
             <div
@@ -239,9 +244,12 @@ export default function Home() {
   );
 }
 
-function StatTile({ label, value, accent, icon }) {
+function StatTile({ label, value, accent, icon, testid }) {
   return (
-    <div className="relative card-flat p-5 overflow-hidden">
+    <div
+      className="relative card-flat p-5 overflow-hidden"
+      data-testid={testid}
+    >
       <div className="flex items-center justify-between">
         <span className="label-over">{label}</span>
         <span className="text-zinc-400">{icon}</span>

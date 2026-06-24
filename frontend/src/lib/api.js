@@ -16,6 +16,8 @@ export const generatePrep = (id) =>
 export const refreshFeed = () =>
   api.post("/hackathons/refresh").then((r) => r.data);
 export const getResources = () => api.get("/resources").then((r) => r.data);
+export const getEventTypes = () =>
+  api.get("/event-types").then((r) => r.data);
 
 /** Server-Sent Events streaming chat using fetch. */
 export async function* streamChat({ sessionId, message, hackathonId }) {

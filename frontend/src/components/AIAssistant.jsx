@@ -99,7 +99,7 @@ export default function AIAssistant() {
         <button
           onClick={() => setOpen(true)}
           data-testid="open-assistant"
-          className="fixed bottom-6 right-6 z-40 group inline-flex items-center gap-2 bg-zinc-950 text-white px-4 py-3 hover:bg-[var(--brand)] transition-colors shadow-xl"
+          className="fixed bottom-24 right-6 z-50 group inline-flex items-center gap-2 bg-zinc-950 text-white px-4 py-3 hover:bg-[var(--brand)] transition-colors shadow-xl"
         >
           <Sparkles className="w-4 h-4" />
           <span className="text-sm font-semibold">Ask HackPilot</span>
@@ -108,7 +108,7 @@ export default function AIAssistant() {
 
       {open && (
         <div
-          className="fixed bottom-6 right-6 z-40 w-[92vw] sm:w-[420px] h-[70vh] sm:h-[560px] bg-white border border-zinc-300 shadow-2xl flex flex-col"
+          className="fixed bottom-24 right-6 z-50 w-[92vw] sm:w-[420px] h-[70vh] sm:h-[560px] bg-white border border-zinc-300 shadow-2xl flex flex-col"
           data-testid="assistant-panel"
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 bg-zinc-950 text-white">

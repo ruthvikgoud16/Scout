@@ -68,6 +68,8 @@ class Hackathon(BaseModel):
     title: str
     company: str
     company_logo: Optional[str] = None
+    event_type: str = "Hackathon"  # Hackathon | Conference | Summit | Workshop | Meetup | Invite-only
+    audience: List[str] = ["Students"]  # subset of [Students, Professionals]
     region: str  # India | International
     mode: str  # Online | Offline | Hybrid
     status: str  # Open | Upcoming | Closed
@@ -144,19 +146,29 @@ async def _llm_full_text(session_id: str, system_message: str, user_text: str) -
 
 # ------------------------- Seed -------------------------
 async def seed_if_empty():
-    count = await db.hackathons.count_documents({})
-    if count > 0:
-        return
-    docs = []
+    """Idempotently upsert seed events by title — adds missing ones,
+    keeps existing user/AI-curated content."""
     now = datetime.now(timezone.utc).isoformat()
+    inserted = 0
     for h in SEED_HACKATHONS:
+        existing = await db.hackathons.find_one({"title": h["title"]})
+        if existing:
+            # backfill new fields if missing
+            patch = {}
+            if not existing.get("event_type"):
+                patch["event_type"] = h.get("event_type", "Hackathon")
+            if not existing.get("audience"):
+                patch["audience"] = h.get("audience", ["Students"])
+            if patch:
+                await db.hackathons.update_one({"_id": existing["_id"]}, {"$set": patch})
+            continue
         obj = Hackathon(**h).model_dump()
         obj["created_at"] = now
         obj["updated_at"] = now
-        docs.append(obj)
-    if docs:
-        await db.hackathons.insert_many(docs)
-        logger.info(f"Seeded {len(docs)} hackathons")
+        await db.hackathons.insert_one(obj)
+        inserted += 1
+    if inserted:
+        logger.info(f"Seeded {inserted} new events")
 
 
 @app.on_event("startup")
@@ -182,6 +194,8 @@ async def list_hackathons(
     mode: Optional[str] = None,
     status: Optional[str] = None,
     company: Optional[str] = None,
+    event_type: Optional[str] = None,
+    audience: Optional[str] = None,
     search: Optional[str] = None,
 ):
     q = {}
@@ -193,6 +207,10 @@ async def list_hackathons(
         q["status"] = status
     if company and company != "All":
         q["company"] = company
+    if event_type and event_type != "All":
+        q["event_type"] = event_type
+    if audience and audience != "All":
+        q["audience"] = audience
     if search:
         q["$or"] = [
             {"title": {"$regex": search, "$options": "i"}},
@@ -220,6 +238,7 @@ async def stats():
     india = await db.hackathons.count_documents({"region": "India"})
     intl = await db.hackathons.count_documents({"region": "International"})
     companies = await db.hackathons.distinct("company")
+    event_types = await db.hackathons.distinct("event_type")
     meta = await db.meta.find_one({"_id": "app"}) or {}
     return {
         "total": total,
@@ -228,8 +247,15 @@ async def stats():
         "india": india,
         "international": intl,
         "companies_count": len(companies),
+        "event_types_count": len(event_types),
         "last_refreshed_at": meta.get("last_refreshed_at"),
     }
+
+
+@api_router.get("/event-types")
+async def event_types():
+    names = await db.hackathons.distinct("event_type")
+    return sorted([n for n in names if n])
 
 
 @api_router.get("/companies")
@@ -314,22 +340,30 @@ async def refresh_hackathons(background_tasks: BackgroundTasks):
 async def _refresh_with_gemini():
     try:
         system = (
-            "You are a research assistant tracking hiring hackathons and recruiting challenges "
-            "from real companies worldwide. Return ONLY JSON — never prose, never markdown fences. "
-            "Focus on 2025-2026 events from Indian and international tech companies."
+            "You are a research assistant tracking hiring hackathons, tech conferences, "
+            "summits, workshops, meetups and invite-only professional events worldwide. "
+            "Return ONLY JSON — never prose, never markdown fences. Focus on 2025-2026 "
+            "events for both students and working professionals."
         )
         existing = await db.hackathons.distinct("title")
-        prompt = f"""List 8 currently-running or upcoming hiring hackathons / recruiting challenges from real companies.
-Mix Indian companies (Myntra, Meesho, Flipkart, Zomato, Swiggy, Razorpay, Cred, Paytm, PhonePe, Sharechan, Postman, Browserstack, Freshworks, Zoho, Tata 1mg, etc.)
-and International companies (Google, Meta, Amazon, Microsoft, Atlassian, Stripe, GitHub, Cloudflare, Datadog, MongoDB, Salesforce, Adobe, Uber, Airbnb, etc.).
-Avoid duplicates of: {existing[:30]}
+        prompt = f"""List 10 currently-running or upcoming events. Mix of types:
+- Hiring hackathons (Myntra, Meesho, Flipkart, Zomato, Swiggy, Razorpay, Cred, Paytm, PhonePe, Postman, Browserstack, Freshworks, Zoho, Google, Meta, Amazon, Microsoft, Atlassian, Stripe, GitHub, Cloudflare, Datadog, Salesforce, Adobe, Uber, Airbnb)
+- Tech conferences (AWS re:Invent, Google I/O, KubeCon, PyCon, DroidCon, Devoxx, JSConf, Strange Loop, GopherCon)
+- Summits (NVIDIA GTC, GitHub Universe, Apple WWDC, Microsoft Build, Render ATL)
+- Workshops / bootcamps (cloud certifications, ML bootcamps, fellowships)
+- Meetups (city-based dev meetups, ProductTank, GDG)
+- Invite-only programs (YC Startup School, On Deck, South Park Commons, Stripe Sessions)
+
+Avoid duplicates of: {existing[:40]}
 
 Return ONLY a JSON array — each item with this exact schema:
 [
   {{
     "title": "string",
-    "company": "string",
+    "company": "string (organising company / org)",
     "company_logo": "https://logo.clearbit.com/<domain>",
+    "event_type": "Hackathon" | "Conference" | "Summit" | "Workshop" | "Meetup" | "Invite-only",
+    "audience": ["Students"] | ["Professionals"] | ["Students", "Professionals"],
     "region": "India" | "International",
     "mode": "Online" | "Offline" | "Hybrid",
     "status": "Open" | "Upcoming" | "Closed",
@@ -338,15 +372,15 @@ Return ONLY a JSON array — each item with this exact schema:
     "end_date": "ISO 8601 datetime",
     "registration_deadline": "ISO 8601 datetime",
     "registration_link": "https://...",
-    "location": "string",
+    "location": "string (city + country, or 'Online (Global)')",
     "description": "1-2 sentence description",
     "eligibility": "1 sentence",
-    "prizes": "1 sentence",
+    "prizes": "1 sentence (what attendees get — offer, swag, networking, prize money)",
     "source_url": "https://..."
   }}
 ]
 - Dates must be realistic for 2025-2026.
-- Use real, plausible URLs (company career pages, hackerearth.com/challenges, unstop.com).
+- Use real, plausible URLs (company event pages, hackerearth.com, unstop.com, lu.ma, eventbrite, meetup.com).
 - No code fences, no commentary."""
         text = await _llm_full_text("refresh-feed", system, prompt)
         parsed = _extract_json(text)
@@ -394,10 +428,13 @@ async def chat_stream(req: ChatRequest):
             )
 
     system = (
-        "You are HackPilot — a friendly, expert career coach for engineering students "
-        "preparing for hiring hackathons (India + global). Give concrete, actionable advice. "
-        "When useful, include resource links (LeetCode, NeetCode, Striver SDE sheet, GFG, "
-        "official company blogs, YouTube channels like CodeWithHarry, Take U Forward, Tech Dummies). "
+        "You are HackPilot — a friendly, expert career coach for STUDENTS and WORKING "
+        "PROFESSIONALS preparing for hiring hackathons, tech conferences, summits, "
+        "workshops, invite-only programs and meetups (India + global). Give concrete, "
+        "actionable advice. When useful, include real resource links (LeetCode, NeetCode, "
+        "Striver SDE sheet, GFG, system-design primer, official company blogs, "
+        "YouTube channels like ByteByteGo, CodeWithHarry, Take U Forward, Tech Dummies, "
+        "and platforms like Unstop, HackerEarth, Lu.ma, Meetup, Eventbrite). "
         "Use short paragraphs and bullet points. Be encouraging."
         + context
     )
@@ -455,7 +492,7 @@ async def chat_history(session_id: str):
 
 @api_router.get("/resources")
 async def resources():
-    """Curated static prep resources hub for students."""
+    """Curated static prep resources hub for students AND working professionals."""
     return {
         "DSA": [
             {"title": "NeetCode 150", "url": "https://neetcode.io/practice", "type": "practice"},
@@ -467,20 +504,41 @@ async def resources():
             {"title": "System Design Primer (GitHub)", "url": "https://github.com/donnemartin/system-design-primer", "type": "docs"},
             {"title": "ByteByteGo YouTube", "url": "https://www.youtube.com/@ByteByteGo", "type": "video"},
             {"title": "Educative – Grokking System Design", "url": "https://www.educative.io/courses/grokking-the-system-design-interview", "type": "course"},
+            {"title": "Designing Data-Intensive Applications", "url": "https://dataintensive.net/", "type": "article"},
         ],
         "Behavioral & HR": [
             {"title": "STAR method guide", "url": "https://www.themuse.com/advice/star-interview-method", "type": "article"},
             {"title": "Tech Interview Handbook", "url": "https://www.techinterviewhandbook.org/", "type": "docs"},
+            {"title": "Levels.fyi salary data", "url": "https://www.levels.fyi/", "type": "article"},
         ],
         "Hackathon Platforms": [
             {"title": "Unstop", "url": "https://unstop.com/hackathons", "type": "practice"},
             {"title": "HackerEarth Challenges", "url": "https://www.hackerearth.com/challenges/", "type": "practice"},
             {"title": "Devfolio", "url": "https://devfolio.co/hackathons", "type": "practice"},
             {"title": "MLH", "url": "https://mlh.io/seasons/2026/events", "type": "practice"},
+            {"title": "Devpost", "url": "https://devpost.com/hackathons", "type": "practice"},
+        ],
+        "Conferences & Events": [
+            {"title": "Lu.ma — tech events", "url": "https://lu.ma/discover", "type": "practice"},
+            {"title": "Meetup tech groups", "url": "https://www.meetup.com/topics/tech/", "type": "practice"},
+            {"title": "Eventbrite tech", "url": "https://www.eventbrite.com/d/online/tech/", "type": "practice"},
+            {"title": "Conference Index (worldwide)", "url": "https://conferenceindex.org/", "type": "article"},
+            {"title": "DEV.to upcoming events", "url": "https://dev.to/t/events", "type": "article"},
+        ],
+        "Career Growth (Professionals)": [
+            {"title": "Staff Engineer's Path (book)", "url": "https://www.staffeng.com/", "type": "article"},
+            {"title": "Pragmatic Engineer Newsletter", "url": "https://newsletter.pragmaticengineer.com/", "type": "article"},
+            {"title": "Manager's Path (Camille Fournier)", "url": "https://www.oreilly.com/library/view/the-managers-path/9781491973882/", "type": "course"},
+            {"title": "Lenny's Newsletter (Product)", "url": "https://www.lennysnewsletter.com/", "type": "article"},
         ],
         "Aptitude & Logical": [
             {"title": "IndiaBix Aptitude", "url": "https://www.indiabix.com/", "type": "practice"},
             {"title": "PrepInsta", "url": "https://prepinsta.com/", "type": "practice"},
+        ],
+        "Startup & Founder": [
+            {"title": "YC Startup School", "url": "https://www.startupschool.org/", "type": "course"},
+            {"title": "Paul Graham's essays", "url": "http://www.paulgraham.com/articles.html", "type": "article"},
+            {"title": "First Round Review", "url": "https://review.firstround.com/", "type": "article"},
         ],
     }
 

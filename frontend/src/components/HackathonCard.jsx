@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
-import { Calendar, MapPin, ArrowUpRight } from "lucide-react";
+import { Calendar, MapPin, ArrowUpRight, Users, Briefcase } from "lucide-react";
 import { fmtDate, countdown, statusColor } from "@/lib/format";
+import CompanyLogo from "@/components/CompanyLogo";
 
 export default function HackathonCard({ h }) {
   const cd = countdown(h.registration_deadline);
   const live = h.status === "Open";
+  const aud = h.audience || [];
 
   return (
     <Link
@@ -17,23 +19,10 @@ export default function HackathonCard({ h }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 bg-zinc-100 grid place-items-center border border-zinc-200 overflow-hidden shrink-0">
-            {h.company_logo ? (
-              <img
-                src={h.company_logo}
-                alt={h.company}
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  e.target.style.display = "none";
-                }}
-              />
-            ) : (
-              <span className="text-xs font-semibold">
-                {h.company?.slice(0, 2)}
-              </span>
-            )}
+            <CompanyLogo name={h.company} url={h.company_logo} />
           </div>
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 truncate">
               {h.company}
             </div>
             <div className="font-semibold text-zinc-950 truncate group-hover:text-[var(--brand)] transition-colors">
@@ -56,13 +45,23 @@ export default function HackathonCard({ h }) {
       </p>
 
       <div className="flex flex-wrap gap-1.5">
+        {h.event_type && (
+          <span className="pill border-zinc-900 bg-zinc-950 text-white">
+            {h.event_type}
+          </span>
+        )}
         <span className="pill">{h.mode}</span>
         <span className="pill">{h.region}</span>
-        {(h.tags || []).slice(0, 2).map((t) => (
-          <span key={t} className="pill">
-            {t}
+        {aud.includes("Students") && (
+          <span className="pill" title="Students">
+            <Users className="w-3 h-3" /> Students
           </span>
-        ))}
+        )}
+        {aud.includes("Professionals") && (
+          <span className="pill" title="Professionals">
+            <Briefcase className="w-3 h-3" /> Pros
+          </span>
+        )}
       </div>
 
       <div className="border-t border-zinc-100 pt-3 flex items-center justify-between text-xs text-zinc-600">
