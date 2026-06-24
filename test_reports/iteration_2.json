@@ -1,0 +1,43 @@
+{
+  "summary": "OpportunityOS iter-2 — tested all 5 new feature areas (Auth, Bookmarks, Skills/Resume/Feed, Notify, ICS) end-to-end. Backend: 30/30 pytest tests pass (15 new in test_opportunityos.py + 15 regression in test_hacktrack.py). Frontend: Playwright-verified register→dashboard, skills add/remove, notify toggle, logged-out bookmark toast, login→bookmark toggle, hackathon detail page with Add-to-Calendar + bookmark-detail buttons, /resources, logout. Scheduler 'Scheduler started' log confirmed; reminder cron runs every 1h and the scan log entries are present in supervisor logs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/me/skills", "issue": "Only trims & caps to 50; does NOT dedupe case-insensitively (req says 'deduped'). Two entries differing only by case both survive. Resume-merge code does dedupe correctly — but direct PUT does not. Low impact since frontend can pre-dedupe."},
+      {"endpoint": "POST /api/auth/logout", "issue": "JWT-based tokens cannot be revoked server-side; only session_token cookie rows are deleted. Behaviour matches spec ('JWT tokens stay valid until expiry — that's expected'), but no test can prove revocation for JWT users."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Cards (Hackathons, Dashboard, Home)", "issues": ["logo.clearbit.com images fail with ERR_NAME_NOT_RESOLVED inside Playwright sandbox (same as iter-1). Production browsers typically load them; consider an onError letter-avatar fallback in CompanyLogo for resilience."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_opportunityos.py",
+    "/app/backend/tests/test_hacktrack.py",
+    "/app/test_reports/pytest/pytest_iter2.xml"
+  ],
+  "action_items": [
+    "(Low) Case-insensitive dedupe in PUT /api/me/skills (server.py set_skills) to match the spec wording 'deduped'.",
+    "(Low) Image onError fallback for CompanyLogo so external logo failures don't leave a blank square."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 873 lines — past the 700-line guideline. Recommend splitting auth/bookmarks/feed/resume routes into dedicated routers.",
+    "server.py still uses deprecated @app.on_event('startup'/'shutdown') — migrate to FastAPI lifespan handlers (carried from iter-1).",
+    "CORS allow_origins='*' with allow_credentials=True is invalid per spec; browsers will reject credentialed cookie requests from real origins (carried from iter-1).",
+    "Object storage initialised lazily on first resume upload (no health check). If Emergent storage is down, first user gets a 500 with no actionable message. Consider a startup probe or clearer error text.",
+    "set_skills accepts arbitrary strings without max-length per skill — a malicious user could submit huge strings. Add per-skill length cap (e.g., 64 chars).",
+    "/api/me/feed scoring is O(n*m) on every request with no caching; fine at current data volume but worth noting as user/event counts grow."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_opportunityos.py (NEW — 15 pytest tests for iter-2 features)"
+  ],
+  "success_rate": {"backend": "100% (30/30 pytest)", "frontend": "100% on all critical flows tested"},
+  "test_credentials": "bathiniruthvik380@gmail.com / opportunity26 (Resend-verified primary). Random TEST_* users created per test run.",
+  "seed_data_creation": "None — backend self-seeds 12 hackathons; tests created throwaway TEST_*@example.com users via /api/auth/register.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New backend test file: /app/backend/tests/test_opportunityos.py (15 tests, ~7s) covering auth/bookmarks/skills/feed/notify/resume/ICS/scheduler. Old test_hacktrack.py still green (~15s). Run both with: pytest /app/backend/tests/ -v. Resume test requires python-docx (already installed) and uses real Gemini call (~5-10s). Frontend testids verified: skill-input, skill-add-btn, upload-resume-btn, notify-switch, bookmark-card-{id}, bookmark-detail, add-to-calendar-btn, login-link, signup-link, login-submit, register-submit, user-menu-btn, menu-logout. Note: Add-to-Calendar uses asChild — the <a> IS the element with data-testid='add-to-calendar-btn'; do NOT query a child <a>. Scheduler log line 'Scheduler started — auto-refresh every 6h, reminder scan every 1h' appears on backend startup, and '[cron] reminder scan starting' / '[cron] reminders sent: N' appear hourly in /var/log/supervisor/backend.err.log. AIAssistant FAB overlap by 'Made with Emergent' badge still applies."
+}

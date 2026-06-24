@@ -5,7 +5,6 @@ import {
   Calendar,
   MapPin,
   ExternalLink,
-  CheckCircle2,
   Sparkles,
   ArrowLeft,
   Clock,
@@ -14,6 +13,7 @@ import {
   GraduationCap,
   FileText,
   Target,
+  CalendarPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +21,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getHackathon, generatePrep } from "@/lib/api";
 import { fmtDate, countdown, statusColor } from "@/lib/format";
 import CompanyLogo from "@/components/CompanyLogo";
+import BookmarkButton from "@/components/BookmarkButton";
+import { icsUrl } from "@/lib/auth";
 import { toast } from "sonner";
 
 const RES_ICON = {
@@ -150,6 +152,19 @@ export default function HackathonDetail() {
                   ? "Regenerate AI prep"
                   : "Generate AI prep"}
             </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-none border-zinc-300 h-12 px-5"
+              data-testid="add-to-calendar-btn"
+            >
+              <a href={icsUrl(h.id)} download>
+                <CalendarPlus className="w-4 h-4 mr-2" /> Add to Calendar
+              </a>
+            </Button>
+            <div className="h-12 inline-flex items-center" data-testid="bookmark-detail-wrap">
+              <BookmarkButton hackathonId={h.id} testid="bookmark-detail" className="h-12 w-12 grid place-items-center border border-zinc-300" />
+            </div>
           </div>
         </div>
 

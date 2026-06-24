@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Calendar, MapPin, ArrowUpRight, Users, Briefcase } from "lucide-react";
 import { fmtDate, countdown, statusColor } from "@/lib/format";
 import CompanyLogo from "@/components/CompanyLogo";
+import BookmarkButton from "@/components/BookmarkButton";
 
 export default function HackathonCard({ h }) {
   const cd = countdown(h.registration_deadline);
@@ -16,7 +17,10 @@ export default function HackathonCard({ h }) {
         live ? "ring-pulse" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="absolute top-2 right-2 z-10">
+        <BookmarkButton hackathonId={h.id} testid={`bookmark-card-${h.id}`} />
+      </div>
+      <div className="flex items-start justify-between gap-3 pr-8">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 bg-zinc-100 grid place-items-center border border-zinc-200 overflow-hidden shrink-0">
             <CompanyLogo name={h.company} url={h.company_logo} />

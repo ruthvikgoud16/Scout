@@ -5,22 +5,30 @@ import uuid
 import logging
 import asyncio
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Annotated
 
-from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
+
+# Load env BEFORE importing local modules so they pick up env vars at module load.
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / ".env")
+
+from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Response, Cookie, Header, UploadFile, File, Depends
+from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
 
 from seed_data import SEED_HACKATHONS
-
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env")
+import auth as auth_lib
+from email_service import send_email, reminder_html
+from storage import put_object, init_storage, APP_NAME
+from skills import extract_pdf_text, extract_docx_text, extract_skills
+from ics import build_ics
+from scheduler import start_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -180,6 +188,12 @@ async def on_startup():
         {"$setOnInsert": {"last_refreshed_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )
+    # Object storage init is lazy — called on first upload
+    # start cron scheduler (auto refresh + reminders)
+    try:
+        start_scheduler(db, _refresh_with_gemini, send_email, reminder_html)
+    except Exception:
+        logger.exception("Failed to start scheduler")
 
 
 # ------------------------- Routes -------------------------
@@ -541,6 +555,306 @@ async def resources():
             {"title": "First Round Review", "url": "https://review.firstround.com/", "type": "article"},
         ],
     }
+
+
+# ------------------------- Auth / User Models -------------------------
+class RegisterReq(BaseModel):
+    email: EmailStr
+    password: str
+    name: Optional[str] = None
+
+
+class LoginReq(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class GoogleSessionReq(BaseModel):
+    session_id: str
+
+
+class SkillsReq(BaseModel):
+    skills: List[str]
+
+
+async def _require_user(
+    session_token: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> dict:
+    token = auth_lib._extract_token(session_token, authorization)
+    if not token:
+        raise HTTPException(401, "Authentication required")
+    user = await auth_lib.get_current_user_from_db(token, db)
+    if not user:
+        raise HTTPException(401, "Invalid or expired session")
+    return user
+
+
+async def _optional_user(
+    session_token: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> Optional[dict]:
+    token = auth_lib._extract_token(session_token, authorization)
+    if not token:
+        return None
+    return await auth_lib.get_current_user_from_db(token, db)
+
+
+def _user_public(u: dict) -> dict:
+    if not u:
+        return None
+    return {
+        "user_id": u.get("user_id"),
+        "email": u.get("email"),
+        "name": u.get("name"),
+        "picture": u.get("picture"),
+        "skills": u.get("skills", []),
+        "bookmarks": u.get("bookmarks", []),
+        "resume_filename": u.get("resume_filename"),
+        "email_notify": u.get("email_notify", True),
+        "auth_provider": u.get("auth_provider", "password"),
+    }
+
+
+# ------------------------- Auth Routes -------------------------
+@api_router.post("/auth/register")
+async def auth_register(req: RegisterReq):
+    existing = await db.users.find_one({"email": req.email.lower()}, {"_id": 0})
+    if existing:
+        raise HTTPException(400, "Email already registered")
+    if len(req.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    user_id = auth_lib.new_user_id()
+    doc = {
+        "user_id": user_id,
+        "email": req.email.lower(),
+        "name": req.name or req.email.split("@")[0],
+        "picture": None,
+        "password_hash": auth_lib.hash_password(req.password),
+        "auth_provider": "password",
+        "skills": [],
+        "bookmarks": [],
+        "email_notify": True,
+        "resume_path": None,
+        "resume_filename": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(doc)
+    token = auth_lib.make_jwt(user_id)
+    return {"token": token, "user": _user_public(doc)}
+
+
+@api_router.post("/auth/login")
+async def auth_login(req: LoginReq):
+    u = await db.users.find_one({"email": req.email.lower()}, {"_id": 0})
+    if not u or not u.get("password_hash"):
+        raise HTTPException(401, "Invalid email or password")
+    if not auth_lib.verify_password(req.password, u["password_hash"]):
+        raise HTTPException(401, "Invalid email or password")
+    token = auth_lib.make_jwt(u["user_id"])
+    return {"token": token, "user": _user_public(u)}
+
+
+@api_router.post("/auth/google-session")
+async def auth_google_session(req: GoogleSessionReq, response: Response):
+    """Exchange Emergent session_id → user + cookie."""
+    info = auth_lib.exchange_google_session(req.session_id)
+    if not info:
+        raise HTTPException(401, "Invalid Google session")
+    email = (info.get("email") or "").lower()
+    if not email:
+        raise HTTPException(400, "No email on Google account")
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    now = datetime.now(timezone.utc).isoformat()
+    if existing:
+        user_id = existing["user_id"]
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "name": info.get("name") or existing.get("name"),
+                "picture": info.get("picture") or existing.get("picture"),
+                "auth_provider": existing.get("auth_provider") or "google",
+            }},
+        )
+    else:
+        user_id = auth_lib.new_user_id()
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": email,
+            "name": info.get("name") or email.split("@")[0],
+            "picture": info.get("picture"),
+            "password_hash": None,
+            "auth_provider": "google",
+            "skills": [],
+            "bookmarks": [],
+            "email_notify": True,
+            "resume_path": None,
+            "resume_filename": None,
+            "created_at": now,
+        })
+    # Store emergent session_token row (7 days)
+    session_token = info["session_token"]
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    await db.user_sessions.insert_one({
+        "session_token": session_token,
+        "user_id": user_id,
+        "expires_at": expires_at,
+        "created_at": now,
+    })
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"token": session_token, "user": _user_public(user)}
+
+
+@api_router.get("/auth/me")
+async def auth_me(user: dict = Depends(_require_user)):
+    return _user_public(user)
+
+
+@api_router.post("/auth/logout")
+async def auth_logout(
+    response: Response,
+    session_token: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = auth_lib._extract_token(session_token, authorization)
+    if token:
+        await db.user_sessions.delete_many({"session_token": token})
+    response.delete_cookie("session_token", path="/")
+    return {"ok": True}
+
+
+# ------------------------- Bookmark Routes -------------------------
+@api_router.post("/me/bookmarks/{hid}")
+async def toggle_bookmark(
+    hid: str, user: dict = Depends(_require_user)
+):
+    h = await db.hackathons.find_one({"id": hid}, {"_id": 0, "id": 1})
+    if not h:
+        raise HTTPException(404, "Event not found")
+    current = user.get("bookmarks", [])
+    if hid in current:
+        new_list = [x for x in current if x != hid]
+        action = "removed"
+    else:
+        new_list = current + [hid]
+        action = "added"
+    await db.users.update_one(
+        {"user_id": user["user_id"]}, {"$set": {"bookmarks": new_list}}
+    )
+    return {"action": action, "bookmarks": new_list}
+
+
+@api_router.get("/me/bookmarks", response_model=List[Hackathon])
+async def my_bookmarks(user: dict = Depends(_require_user)):
+    ids = user.get("bookmarks", [])
+    if not ids:
+        return []
+    docs = await db.hackathons.find({"id": {"$in": ids}}, {"_id": 0}).to_list(500)
+    return docs
+
+
+@api_router.put("/me/notify")
+async def update_notify(
+    enabled: bool, user: dict = Depends(_require_user)
+):
+    await db.users.update_one(
+        {"user_id": user["user_id"]}, {"$set": {"email_notify": enabled}}
+    )
+    return {"email_notify": enabled}
+
+
+# ------------------------- Skills / Resume / Feed -------------------------
+@api_router.put("/me/skills")
+async def set_skills(
+    req: SkillsReq, user: dict = Depends(_require_user)
+):
+    skills = [s.strip() for s in req.skills if s and s.strip()][:50]
+    await db.users.update_one(
+        {"user_id": user["user_id"]}, {"$set": {"skills": skills}}
+    )
+    return {"skills": skills}
+
+
+@api_router.post("/me/resume")
+async def upload_resume(
+    file: UploadFile = File(...),
+    user: dict = Depends(_require_user),
+):
+    if not file.filename:
+        raise HTTPException(400, "No filename")
+    ext = file.filename.lower().split(".")[-1]
+    if ext not in {"pdf", "docx"}:
+        raise HTTPException(400, "Only PDF or DOCX allowed")
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Max 5MB")
+    path = f"{APP_NAME}/resumes/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+    try:
+        result = put_object(path, data, file.content_type or "application/octet-stream")
+    except Exception:
+        logger.exception("Resume upload failed")
+        raise HTTPException(500, "Upload failed")
+    text = extract_pdf_text(data) if ext == "pdf" else extract_docx_text(data)
+    skills = await extract_skills(text)
+    # merge with existing skills (dedup, case-insensitive)
+    existing_skills = user.get("skills") or []
+    merged = list({s.lower(): s for s in existing_skills + skills}.values())[:50]
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "resume_path": result["path"],
+            "resume_filename": file.filename,
+            "skills": merged,
+        }},
+    )
+    return {"filename": file.filename, "extracted_skills": skills, "all_skills": merged}
+
+
+@api_router.get("/me/feed", response_model=List[Hackathon])
+async def personalised_feed(
+    user: dict = Depends(_require_user)
+):
+    skills_lower = [s.lower() for s in (user.get("skills") or [])]
+    docs = await db.hackathons.find(
+        {"status": {"$in": ["Open", "Upcoming"]}}, {"_id": 0}
+    ).to_list(500)
+    if not skills_lower:
+        return docs[:30]
+    # naive scoring: count of skills appearing in title/description/tags
+    def score(h):
+        bag = " ".join([
+            h.get("title", ""),
+            h.get("description", ""),
+            " ".join(h.get("tags") or []),
+            h.get("eligibility", "") or "",
+        ]).lower()
+        return sum(1 for s in skills_lower if s in bag)
+    docs.sort(key=score, reverse=True)
+    return docs[:30]
+
+
+# ------------------------- ICS Calendar -------------------------
+@api_router.get("/hackathons/{hid}/ics")
+async def event_ics(hid: str):
+    h = await db.hackathons.find_one({"id": hid}, {"_id": 0})
+    if not h:
+        raise HTTPException(404, "Event not found")
+    body = build_ics(h)
+    safe = re.sub(r"[^a-z0-9]+", "-", (h.get("title") or "event").lower()).strip("-")
+    return Response(
+        content=body,
+        media_type="text/calendar",
+        headers={"Content-Disposition": f'attachment; filename="{safe}.ics"'},
+    )
 
 
 # Register routes & middleware
