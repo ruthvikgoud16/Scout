@@ -1,7 +1,6 @@
 # 🔭 Scout — HackTrack
 
-<div align="center">
-  <img src="https://images.pexels.com/photos/32933031/pexels-photo-32933031.jpeg" alt="Scout Banner" width="100%" style="border-radius: 12px; margin-bottom: 20px; max-height: 250px; object-fit: cover;" />
+
 
   <p align="center">
     <strong>A live, self-updating catalog of hackathons, conferences, and technical summits.</strong>
@@ -141,6 +140,4 @@ The design follows **Swiss & High-Contrast** aesthetics with a clean light theme
 
 ---
 
-<div align="center">
-  <sub>Built with ❤️ by Antigravity and the Scout Developer Team.</sub>
-</div>
+
